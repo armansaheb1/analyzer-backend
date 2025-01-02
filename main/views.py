@@ -20,7 +20,12 @@ import sys
 import threading
 import time
 import requests
+from Analyzer import settings
 from openai import OpenAI
+client = OpenAI(
+    # defaults to os.environ.get("OPENAI_API_KEY")
+    api_key=settings.OPEN_AI_KEY,
+)
 # from langchain_community.document_loaders import AsyncHtmlLoader, RSSFeedLoader
 # from llama_index.core import SimpleDirectoryReader, GPTVectorStoreIndex, StorageContext, load_index_from_storage
 # from llama_index.core import Settings
@@ -259,7 +264,7 @@ class GPTBuilder(APIView):
     def post(self, request, slug):
         import logging
         logger = logging.getLogger('django')
-
+        
         query = models.Service.objects.get(slug=slug)
         prompt = query.prompt
         prompt = prompt + '\n return result as only a responsive html text without pictures and code details with maximum header of h4 \n'
@@ -267,10 +272,19 @@ class GPTBuilder(APIView):
             if request.data["data2"]['n' + str(item.id)]:
                 prompt = prompt + '\n' + item.prompt.replace('$entry', request.data["data2"]['n' + str(item.id)])
         prompt = prompt + '\n متن اصلی : \n' + request.data["maintext"]
-        
-        logger.info(prompt)
-        response = model.generate_content(prompt)
-        return Response(response.text)
+        completion = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                        {"role": "system", "content": "You are a helpful assistant."},
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ]
+                )
+        response = completion.choices[0].message.content
+        # response = model.generate_content(prompt)
+        return Response(response)
 
 
 
@@ -284,6 +298,7 @@ class GBuilder(APIView):
         query = models.Service.objects.get(slug=slug)
         prompt = query.prompt
         prompt = prompt + "\n به فرمت h6,b,p تبدیل کن. اطمینان حاصل کن که متن به پاراگراف‌های مناسب با تگ‌های <p> تقسیم شده و برای تمام عناوین از تگ <h6> استفاده شود و تمام تگ ها justify باشد. برای جدا تمام کردن پاراگراف‌ها و هدر ها از تگ <br> استفاده کن.\n"
+        prompt = prompt + 'بدون توضیحات و اضافات'
         for item in query.static_variables.all():
             if request.data["data2"]['n' + str(item.id)]:
                 prompt = prompt + '\n' + item.prompt.replace('$entry', request.data["data2"]['n' + str(item.id)])
@@ -293,8 +308,20 @@ class GBuilder(APIView):
         prompt = prompt + '\n متن اصلی : \n' + request.data["maintext"]
         
         logger.info(prompt)
-        response = model.generate_content(prompt)
-        return Response(response.text)
+        
+        completion = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                        {"role": "system", "content": "You are a helpful assistant."},
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ]
+                )
+        response = completion.choices[0].message.content
+        # response = model.generate_content(prompt)
+        return Response(response)
 
 
 class GBuilderWrite(APIView):
@@ -306,15 +333,26 @@ class GBuilderWrite(APIView):
         query = models.StaticEntry.objects.all()
 
         prompt = "\n به فرمت h6,b,p تبدیل کن. اطمینان حاصل کن که متن به پاراگراف‌های مناسب با تگ‌های <p> تقسیم شده و برای تمام عناوین از تگ <h6> استفاده شود و تمام تگ ها justify باشد. برای جدا تمام کردن پاراگراف‌ها و هدر ها از تگ <br> استفاده کن.\n"
+        prompt = prompt + 'بدون توضیحات و اضافات'
         for item in query:
             if request.data["data2"]['n' + str(item.id)]:
                 prompt = prompt + '\n' + item.prompt.replace('$entry', request.data["data2"]['n' + str(item.id)])
         prompt = prompt + '\n متن اصلی : \n' + request.data["maintext"]
         
         logger.info(prompt)
-        response = model.generate_content(prompt)
-        return Response(response.text)
-
+        completion = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                        {"role": "system", "content": "You are a helpful assistant."},
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ]
+                )
+        response = completion.choices[0].message.content
+        # response = model.generate_content(prompt)
+        return Response(response)
 class GBuilderRebuild(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -322,24 +360,48 @@ class GBuilderRebuild(APIView):
         query = models.RebuildService.objects.get(id = id)
 
         prompt = "\n به فرمت h6,b,p تبدیل کن. اطمینان حاصل کن که متن به پاراگراف‌های مناسب با تگ‌های <p> تقسیم شده و برای تمام عناوین از تگ <h6> استفاده شود و تمام تگ ها justify باشد. برای جدا تمام کردن پاراگراف‌ها و هدر ها از تگ <br> استفاده کن.\n"
+        prompt = prompt + 'بدون توضیحات و اضافات'
         prompt = prompt + query.prompt
         prompt = prompt + '\n متن اصلی : \n' + request.data["text"]
         
-        response = model.generate_content(prompt)
-        return Response(response.text.replace('```html','').replace('```',''))
+        completion = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                        {"role": "system", "content": "You are a helpful assistant."},
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ]
+                )
+        response = completion.choices[0].message.content
+        # response = model.generate_content(prompt)
+        return Response(response.replace('```html','').replace('```',''))
 
 class GBuilderFormat(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, id):
-        query = models.RebuildService.objects.get(id = id)
+        query = models.FormatService.objects.get(id = id)
 
         prompt = "\n به فرمت h6,b,p تبدیل کن. اطمینان حاصل کن که متن به پاراگراف‌های مناسب با تگ‌های <p> تقسیم شده و برای تمام عناوین از تگ <h6> استفاده شود و تمام تگ ها justify باشد. برای جدا تمام کردن پاراگراف‌ها و هدر ها از تگ <br> استفاده کن.\n"
+        prompt = prompt + '\nبدون توضیحات و اضافات\n'
         prompt = prompt + query.prompt
         prompt = prompt + '\n متن اصلی : \n' + request.data["text"]
         
-        response = model.generate_content(prompt)
-        return Response(response.text.replace('```html','').replace('```',''))
+        completion = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                        {"role": "system", "content": "You are a helpful assistant."},
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ]
+                )
+        response = completion.choices[0].message.content
+        # response = model.generate_content(prompt)
+        return Response(response.replace('```html','').replace('```',''))
 
 class GBuilderNews(APIView):
     permission_classes = [IsAuthenticated]
@@ -470,8 +532,19 @@ class GBuilderIdea(APIView):
         #         prompt = prompt + '\n' + item.prompt.replace('$entry', str(request.data["data"]['n' + str(item.id)]))
 
         
-        response = model.generate_content(prompt)
-        return Response(json.loads(response.text.replace('```json', '').replace('```', '')))
+        completion = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                        {"role": "system", "content": "You are a helpful assistant."},
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ]
+                )
+        response = completion.choices[0].message.content
+        # response = model.generate_content(prompt)
+        return Response(json.loads(response.replace('```json', '').replace('```', '')))
 
 
 class Uploader(APIView):
@@ -502,6 +575,7 @@ class OccasionBuilder(APIView):
         prompt = service.prompt
         prompt = prompt + '\n' + 'مناسبت:' + request.data['text']
         prompt =  prompt + "\n به فرمت h6,b,p تبدیل کن. اطمینان حاصل کن که متن به پاراگراف‌های مناسب با تگ‌های <p> تقسیم شده و برای تمام عناوین از تگ <h6> استفاده شود و تمام تگ ها justify باشد. برای جدا تمام کردن پاراگراف‌ها و هدر ها از تگ <br> استفاده کن.\n"
+        prompt = prompt + 'بدون توضیحات و اضافات'
         description = model.generate_content(prompt).text
         modeled.text= description.replace('```html', '').replace('```', '')
         modeled.save()

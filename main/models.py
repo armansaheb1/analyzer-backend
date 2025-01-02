@@ -109,7 +109,7 @@ class NewsService(models.Model):
 class NewsSite(models.Model):
     name = models.CharField(max_length=100)
     image =models.ImageField(upload_to='icons', null=True)
-    json = models.JSONField(null = True, blank= True, editable=False)
+    json = models.JSONField(null = True, blank= True)
     def get_image(self):
         if not self.image:
             return ''
